@@ -90,21 +90,29 @@ fun SpeakApp(
             .padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        Text("Speak Android", style = MaterialTheme.typography.titleLarge)
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Text("Speak Android", style = MaterialTheme.typography.titleLarge, modifier = Modifier.weight(1f))
+            if (screen == AppScreen.RECORD) {
+                Button(onClick = { screen = AppScreen.HISTORY }) { Text("Recordings List") }
+            } else {
+                Button(onClick = { screen = AppScreen.RECORD }) { Text("Back") }
+            }
+        }
 
         when (screen) {
             AppScreen.RECORD -> RecordScreen(
                 state = state,
                 onStart = onStart,
-                onStop = onStop,
-                onOpenHistory = { screen = AppScreen.HISTORY }
+                onStop = onStop
             )
             AppScreen.HISTORY -> HistoryScreen(
                 recordings = state.recordings,
                 isPlayingId = state.isPlayingId,
                 onPlay = onPlay,
-                onDelete = onDelete,
-                onBack = { screen = AppScreen.RECORD }
+                onDelete = onDelete
             )
         }
     }
@@ -114,8 +122,7 @@ fun SpeakApp(
 private fun RecordScreen(
     state: MainViewModel.UiState,
     onStart: () -> Unit,
-    onStop: () -> Unit,
-    onOpenHistory: () -> Unit
+    onStop: () -> Unit
 ) {
     val hours = state.elapsedMillis / 3_600_000
     val minutes = (state.elapsedMillis % 3_600_000) / 60_000
@@ -129,7 +136,6 @@ private fun RecordScreen(
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             Button(onClick = onStart, enabled = !state.isRecording) { Text("Start Recording") }
             Button(onClick = onStop, enabled = state.isRecording) { Text("Stop Recording") }
-            Button(onClick = onOpenHistory) { Text("Recordings List") }
         }
 
         Text("Live English transcription:")
@@ -147,11 +153,9 @@ private fun HistoryScreen(
     recordings: List<RecordingEntity>,
     isPlayingId: Long?,
     onPlay: (RecordingEntity) -> Unit,
-    onDelete: (RecordingEntity) -> Unit,
-    onBack: () -> Unit
+    onDelete: (RecordingEntity) -> Unit
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        Button(onClick = onBack) { Text("Back") }
         Text("Saved recordings: ${recordings.size}", style = MaterialTheme.typography.titleMedium)
         LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
             items(recordings, key = { it.id }) { row ->
