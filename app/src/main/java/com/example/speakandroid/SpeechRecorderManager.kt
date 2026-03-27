@@ -70,8 +70,9 @@ class SpeechRecorderManager(private val context: Context) {
         )
     }
 
-    fun stop(): Pair<File?, String> {
+    fun stop(): Triple<File?, String, Long> {
         val transcript = combineText()
+        val duration = if (startElapsedRealtime == 0L) 0L else SystemClock.elapsedRealtime() - startElapsedRealtime
         runCatching { speechRecognizer?.stopListening() }
         runCatching { speechRecognizer?.destroy() }
         speechRecognizer = null
@@ -81,7 +82,8 @@ class SpeechRecorderManager(private val context: Context) {
         mediaRecorder = null
 
         _state.value = LiveState()
-        return outputFile to transcript
+        startElapsedRealtime = 0L
+        return Triple(outputFile, transcript, duration)
     }
 
     fun play(filePath: String, onCompleted: () -> Unit) {

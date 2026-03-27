@@ -67,7 +67,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun stopRecording() {
         viewModelScope.launch {
             _uiState.update { it.copy(status = "Stopping and translating...") }
-            val (file, english) = recorderManager.stop()
+            val (file, english, durationMillis) = recorderManager.stop()
             if (file == null) {
                 _uiState.update { it.copy(status = "No recording file created.") }
                 return@launch
@@ -78,7 +78,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 RecordingEntity(
                     filePath = file.absolutePath,
                     createdAt = System.currentTimeMillis(),
-                    durationMillis = _uiState.value.elapsedMillis,
+                    durationMillis = durationMillis,
                     englishText = english,
                     hindiText = hindi,
                     gujaratiText = gujarati
