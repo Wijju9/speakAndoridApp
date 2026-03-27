@@ -162,6 +162,7 @@ private fun HistoryScreen(
                 RecordingCard(
                     row = row,
                     isPlaying = isPlayingId == row.id,
+                    hasAudio = row.filePath.isNotBlank(),
                     onPlay = { onPlay(row) },
                     onDelete = { onDelete(row) }
                 )
@@ -174,6 +175,7 @@ private fun HistoryScreen(
 private fun RecordingCard(
     row: RecordingEntity,
     isPlaying: Boolean,
+    hasAudio: Boolean,
     onPlay: () -> Unit,
     onDelete: () -> Unit
 ) {
@@ -184,8 +186,11 @@ private fun RecordingCard(
             )
             Text("Duration: ${row.durationMillis / 1000}s")
             Text("English: ${row.englishText}")
+            if (!hasAudio) {
+                Text("Audio: Not saved (text-only mode)")
+            }
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Button(onClick = onPlay, enabled = !isPlaying) {
+                Button(onClick = onPlay, enabled = hasAudio && !isPlaying) {
                     Text(if (isPlaying) "Playing..." else "Replay")
                 }
                 Button(onClick = onDelete) {

@@ -3,15 +3,12 @@ package com.example.speakandroid
 import android.content.Context
 import android.content.Intent
 import android.media.MediaPlayer
-import android.media.MediaRecorder
-import android.os.Build
 import android.os.SystemClock
 import android.speech.RecognitionListener
 import android.speech.RecognizerIntent
 import android.speech.SpeechRecognizer
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
-import java.io.File
 
 class SpeechRecorderManager(private val context: Context) {
 
@@ -25,9 +22,7 @@ class SpeechRecorderManager(private val context: Context) {
     private val _state = MutableStateFlow(LiveState())
     val state: StateFlow<LiveState> = _state
 
-    private var mediaRecorder: MediaRecorder? = null
     private var speechRecognizer: SpeechRecognizer? = null
-    private var outputFile: File? = null
     private var startElapsedRealtime = 0L
 
     private var finalTranscript = ""
@@ -39,27 +34,8 @@ class SpeechRecorderManager(private val context: Context) {
             return "Speech recognition service is not available on this device."
         }
 
-        outputFile = File(context.filesDir, "rec_${System.currentTimeMillis()}.m4a")
         finalTranscript = ""
         partialTranscript = ""
-
-        mediaRecorder = runCatching {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                MediaRecorder(context)
-            } else {
-                @Suppress("DEPRECATION")
-                MediaRecorder()
-            }
-        }.getOrNull()?.apply {
-            setAudioSource(MediaRecorder.AudioSource.MIC)
-            setOutputFormat(MediaRecorder.OutputFormat.MPEG_4)
-            setAudioEncoder(MediaRecorder.AudioEncoder.AAC)
-            setAudioSamplingRate(16000)
-            setAudioEncodingBitRate(96000)
-            setOutputFile(outputFile!!.absolutePath)
-            prepare()
-            start()
-        } ?: return "Unable to start microphone recording."
 
         speechRecognizer = runCatching { SpeechRecognizer.createSpeechRecognizer(context) }
             .getOrNull()
@@ -67,9 +43,6 @@ class SpeechRecorderManager(private val context: Context) {
                 setRecognitionListener(recognitionListener)
                 startListening(recognizerIntent())
             } ?: run {
-            runCatching { mediaRecorder?.stop() }
-            runCatching { mediaRecorder?.release() }
-            mediaRecorder = null
             return "Unable to start speech recognizer."
         }
 
@@ -85,20 +58,16 @@ class SpeechRecorderManager(private val context: Context) {
         )
     }
 
-    fun stop(): Triple<File?, String, Long> {
+    fun stop(): Pair<String, Long> {
         val transcript = combineText()
         val duration = if (startElapsedRealtime == 0L) 0L else SystemClock.elapsedRealtime() - startElapsedRealtime
         runCatching { speechRecognizer?.stopListening() }
         runCatching { speechRecognizer?.destroy() }
         speechRecognizer = null
 
-        runCatching { mediaRecorder?.stop() }
-        runCatching { mediaRecorder?.release() }
-        mediaRecorder = null
-
         _state.value = LiveState()
         startElapsedRealtime = 0L
-        return Triple(outputFile, transcript, duration)
+        return transcript to duration
     }
 
     fun play(filePath: String, onCompleted: () -> Unit) {

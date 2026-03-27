@@ -70,15 +70,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun stopRecording() {
         viewModelScope.launch {
             _uiState.update { it.copy(status = "Stopping and saving English text...") }
-            val (file, english, durationMillis) = recorderManager.stop()
-            if (file == null) {
-                _uiState.update { it.copy(status = "No recording file created.") }
-                return@launch
-            }
+            val (english, durationMillis) = recorderManager.stop()
 
             dao.insert(
                 RecordingEntity(
-                    filePath = file.absolutePath,
+                    filePath = "",
                     createdAt = System.currentTimeMillis(),
                     durationMillis = durationMillis,
                     englishText = english,
@@ -89,7 +85,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             _uiState.update {
                 it.copy(
                     status = if (english.isBlank()) {
-                        "Saved audio, but no English text was recognized. Please check mic/network and try again."
+                        "No English text was recognized. Please check mic/network and try again."
                     } else {
                         "Saved locally with English speech-to-text."
                     }
@@ -110,6 +106,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun playRecording(row: RecordingEntity) {
+        if (row.filePath.isBlank()) {
+            _uiState.update { it.copy(status = "This entry has text only. Audio replay is not available.") }
+            return
+        }
         _uiState.update { it.copy(isPlayingId = row.id, status = "Playing audio...") }
         recorderManager.play(row.filePath) {
             _uiState.update { it.copy(isPlayingId = null, status = "Playback complete.") }
