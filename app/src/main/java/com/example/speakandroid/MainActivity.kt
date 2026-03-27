@@ -30,6 +30,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.unit.sp
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import java.text.SimpleDateFormat
@@ -132,17 +133,23 @@ private fun RecordScreen(
     val minutes = (state.elapsedMillis % 3_600_000) / 60_000
     val seconds = (state.elapsedMillis % 60_000) / 1000
 
-    Column(verticalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.fillMaxWidth()) {
+    Column(
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+        modifier = Modifier.fillMaxSize()
+    ) {
         Text("English", style = MaterialTheme.typography.titleMedium)
         Card(
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier
+                .fillMaxWidth()
+                .weight(1f),
             colors = CardDefaults.cardColors(containerColor = Color(0xFFF8F9FA))
         ) {
             Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text("Tap mic and speak", style = MaterialTheme.typography.bodyMedium, color = Color.Gray)
                 Text(
                     text = if (state.liveEnglishText.isBlank()) "Speech text will appear here..." else state.liveEnglishText,
-                    style = MaterialTheme.typography.bodyLarge
+                    style = MaterialTheme.typography.bodyLarge,
+                    fontSize = 28.sp
                 )
             }
         }

@@ -1,8 +1,10 @@
 package com.example.speakandroid
 
 import android.app.Application
+import android.content.pm.PackageManager
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import androidx.core.content.ContextCompat
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -55,6 +57,15 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun startRecording() {
+        val hasMicPermission = ContextCompat.checkSelfPermission(
+            getApplication(),
+            android.Manifest.permission.RECORD_AUDIO
+        ) == PackageManager.PERMISSION_GRANTED
+        if (!hasMicPermission) {
+            _uiState.update { it.copy(status = "Microphone permission is required. Please allow RECORD_AUDIO.") }
+            return
+        }
+
         val startError = recorderManager.start()
         if (startError != null) {
             _uiState.update { it.copy(status = "$startError Check log: files/stt_logs.txt") }
