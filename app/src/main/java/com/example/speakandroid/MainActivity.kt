@@ -1,6 +1,7 @@
 package com.example.speakandroid
 
 import android.Manifest
+import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Bundle
 import androidx.activity.ComponentActivity
@@ -15,12 +16,16 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
@@ -30,6 +35,9 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
@@ -54,8 +62,12 @@ class MainActivity : ComponentActivity() {
                     state = uiState,
                     onStart = viewModel::startRecording,
                     onStop = viewModel::stopRecording,
+                    onClear = viewModel::clearText,
                     onPlay = viewModel::playRecording,
-                    onDelete = viewModel::deleteRecording
+                    onDelete = viewModel::deleteRecording,
+                    onClosePaywall = viewModel::closePaywall,
+                    onUpgradeMonthly = viewModel::upgradeMonthly,
+                    onUpgradeLifetime = viewModel::upgradeLifetime
                 )
             }
         }
@@ -84,8 +96,12 @@ fun SpeakApp(
     state: MainViewModel.UiState,
     onStart: () -> Unit,
     onStop: () -> Unit,
+    onClear: () -> Unit,
     onPlay: (RecordingEntity) -> Unit,
-    onDelete: (RecordingEntity) -> Unit
+    onDelete: (RecordingEntity) -> Unit,
+    onClosePaywall: () -> Unit,
+    onUpgradeMonthly: () -> Unit,
+    onUpgradeLifetime: () -> Unit
 ) {
     var screen by remember { mutableStateOf(AppScreen.RECORD) }
 
@@ -111,13 +127,35 @@ fun SpeakApp(
             AppScreen.RECORD -> RecordScreen(
                 state = state,
                 onStart = onStart,
-                onStop = onStop
+                onStop = onStop,
+                onClear = onClear
             )
             AppScreen.HISTORY -> HistoryScreen(
                 recordings = state.recordings,
                 isPlayingId = state.isPlayingId,
                 onPlay = onPlay,
                 onDelete = onDelete
+            )
+        }
+
+        if (state.showPaywall) {
+            AlertDialog(
+                onDismissRequest = onClosePaywall,
+                title = { Text("Free limit reached") },
+                text = {
+                    Text(
+                        "Upgrade to continue voice-to-text.\n\n₹99/month or ₹299 lifetime."
+                    )
+                },
+                confirmButton = {
+                    Button(onClick = onUpgradeMonthly) { Text("₹99/month") }
+                },
+                dismissButton = {
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        TextButton(onClick = onUpgradeLifetime) { Text("₹299 lifetime") }
+                        TextButton(onClick = onClosePaywall) { Text("Later") }
+                    }
+                }
             )
         }
     }
@@ -127,8 +165,11 @@ fun SpeakApp(
 private fun RecordScreen(
     state: MainViewModel.UiState,
     onStart: () -> Unit,
-    onStop: () -> Unit
+    onStop: () -> Unit,
+    onClear: () -> Unit
 ) {
+    val clipboardManager = LocalClipboardManager.current
+    val context = LocalContext.current
     val hours = state.elapsedMillis / 3_600_000
     val minutes = (state.elapsedMillis % 3_600_000) / 60_000
     val seconds = (state.elapsedMillis % 60_000) / 1000
@@ -144,7 +185,12 @@ private fun RecordScreen(
                 .weight(1f),
             colors = CardDefaults.cardColors(containerColor = Color(0xFFF8F9FA))
         ) {
-            Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Column(
+                modifier = Modifier
+                    .padding(16.dp)
+                    .verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
                 Text("Tap mic and speak", style = MaterialTheme.typography.bodyMedium, color = Color.Gray)
                 Text(
                     text = if (state.liveEnglishText.isBlank()) "Speech text will appear here..." else state.liveEnglishText,
@@ -162,6 +208,23 @@ private fun RecordScreen(
         Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             Button(onClick = onStart, enabled = !state.isRecording) { Text("🎤 Start") }
             Button(onClick = onStop, enabled = state.isRecording) { Text("■ Stop") }
+            Button(onClick = onClear) { Text("🧹 Clear") }
+        }
+        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            Button(
+                onClick = {
+                    clipboardManager.setText(AnnotatedString(state.liveEnglishText))
+                }
+            ) { Text("Copy") }
+            Button(
+                onClick = {
+                    val shareIntent = Intent(Intent.ACTION_SEND).apply {
+                        type = "text/plain"
+                        putExtra(Intent.EXTRA_TEXT, state.liveEnglishText)
+                    }
+                    context.startActivity(Intent.createChooser(shareIntent, "Share text"))
+                }
+            ) { Text("Share") }
         }
     }
 }

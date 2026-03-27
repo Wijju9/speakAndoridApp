@@ -78,6 +78,13 @@ class SpeechRecorderManager(private val context: Context) {
         return transcript to duration
     }
 
+    fun clearTranscript() {
+        finalTranscript = ""
+        partialTranscript = ""
+        _state.value = _state.value.copy(transcriptEnglish = "", lastError = null)
+        AppLogger.info(context, "Transcript cleared by user.")
+    }
+
     fun play(filePath: String, onCompleted: () -> Unit) {
         val player = MediaPlayer()
         player.setDataSource(filePath)

@@ -20,7 +20,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         val liveEnglishText: String = "",
         val recordings: List<RecordingEntity> = emptyList(),
         val isPlayingId: Long? = null,
-        val status: String = "Ready"
+        val status: String = "Ready",
+        val showPaywall: Boolean = false,
+        val isPremium: Boolean = false
     )
 
     private val dao = AppDatabase.get(application).recordingDao()
@@ -52,11 +54,23 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             while (true) {
                 delay(1000)
                 recorderManager.tick()
+                val current = _uiState.value
+                if (
+                    current.isRecording &&
+                    !current.isPremium &&
+                    current.elapsedMillis >= FREE_LIMIT_MILLIS
+                ) {
+                    stopRecording(limitReached = true)
+                }
             }
         }
     }
 
     fun startRecording() {
+        if (!_uiState.value.isPremium && _uiState.value.showPaywall) {
+            _uiState.update { it.copy(status = "Free limit reached. Upgrade to continue.") }
+            return
+        }
         val hasMicPermission = ContextCompat.checkSelfPermission(
             getApplication(),
             android.Manifest.permission.RECORD_AUDIO
@@ -78,7 +92,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    fun stopRecording() {
+    fun stopRecording(limitReached: Boolean = false) {
         viewModelScope.launch {
             _uiState.update { it.copy(status = "Stopping and saving English text...") }
             val (english, durationMillis) = recorderManager.stop()
@@ -99,9 +113,39 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                         "No English text recognized. Check log: files/stt_logs.txt"
                     } else {
                         "Text converted successfully."
-                    }
+                    },
+                    showPaywall = limitReached || it.showPaywall
                 )
             }
+        }
+    }
+
+    fun clearText() {
+        recorderManager.clearTranscript()
+        _uiState.update { it.copy(status = "Text cleared.") }
+    }
+
+    fun closePaywall() {
+        _uiState.update { it.copy(showPaywall = false) }
+    }
+
+    fun upgradeMonthly() {
+        _uiState.update {
+            it.copy(
+                isPremium = true,
+                showPaywall = false,
+                status = "Premium unlocked: ₹99/month plan selected."
+            )
+        }
+    }
+
+    fun upgradeLifetime() {
+        _uiState.update {
+            it.copy(
+                isPremium = true,
+                showPaywall = false,
+                status = "Premium unlocked: ₹299 lifetime plan selected."
+            )
         }
     }
 
@@ -125,5 +169,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         recorderManager.play(row.filePath) {
             _uiState.update { it.copy(isPlayingId = null, status = "Playback complete.") }
         }
+    }
+
+    companion object {
+        private const val FREE_LIMIT_MILLIS = 60_000L
     }
 }
