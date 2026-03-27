@@ -22,6 +22,9 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
@@ -42,7 +45,7 @@ class MainActivity : ComponentActivity() {
         setContent {
             MaterialTheme {
                 val uiState by viewModel.uiState.collectAsState()
-                RecordingScreen(
+                SpeakApp(
                     state = uiState,
                     onStart = viewModel::startRecording,
                     onStop = viewModel::stopRecording,
@@ -69,47 +72,87 @@ class MainActivity : ComponentActivity() {
     }
 }
 
+private enum class AppScreen { RECORD, HISTORY }
+
 @Composable
-fun RecordingScreen(
+fun SpeakApp(
     state: MainViewModel.UiState,
     onStart: () -> Unit,
     onStop: () -> Unit,
     onPlay: (RecordingEntity) -> Unit,
     onDelete: (RecordingEntity) -> Unit
 ) {
+    var screen by remember { mutableStateOf(AppScreen.RECORD) }
+
     Column(
         modifier = Modifier
             .fillMaxSize()
             .padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        Text("Realtime Voice Recorder + Translation", style = MaterialTheme.typography.titleLarge)
+        Text("Speak Android", style = MaterialTheme.typography.titleLarge)
+
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Button(onClick = { screen = AppScreen.RECORD }) { Text("Record Screen") }
+            Button(onClick = { screen = AppScreen.HISTORY }) { Text("Recordings List") }
+        }
+
+        when (screen) {
+            AppScreen.RECORD -> RecordScreen(state = state, onStart = onStart, onStop = onStop)
+            AppScreen.HISTORY -> HistoryScreen(
+                recordings = state.recordings,
+                isPlayingId = state.isPlayingId,
+                onPlay = onPlay,
+                onDelete = onDelete
+            )
+        }
+    }
+}
+
+@Composable
+private fun RecordScreen(
+    state: MainViewModel.UiState,
+    onStart: () -> Unit,
+    onStop: () -> Unit
+) {
+    val hours = state.elapsedMillis / 3_600_000
+    val minutes = (state.elapsedMillis % 3_600_000) / 60_000
+    val seconds = (state.elapsedMillis % 60_000) / 1000
+
+    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Text("Status: ${state.status}")
-
-        val hours = state.elapsedMillis / 3_600_000
-        val minutes = (state.elapsedMillis % 3_600_000) / 60_000
-        val seconds = (state.elapsedMillis % 60_000) / 1000
-
-        Text("Recording timer: %02d:%02d:%02d".format(hours, minutes, seconds))
-        Text("Long-session ready: keep app active for 2+ hours recordings.")
+        Text("Timer: %02d:%02d:%02d".format(hours, minutes, seconds))
+        Text("Use this screen to start/stop and see full live speaking text.")
 
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             Button(onClick = onStart, enabled = !state.isRecording) { Text("Start Recording") }
             Button(onClick = onStop, enabled = state.isRecording) { Text("Stop Recording") }
         }
 
-        Text("Live English text:")
-        Text(
-            if (state.liveEnglishText.isBlank()) "(Speak now - transcript appears instantly)"
-            else state.liveEnglishText
-        )
+        Text("Live English transcription:")
+        Card(modifier = Modifier.fillMaxWidth()) {
+            Text(
+                modifier = Modifier.padding(12.dp),
+                text = if (state.liveEnglishText.isBlank()) "Speak now..." else state.liveEnglishText
+            )
+        }
+    }
+}
 
-        Text("Saved sessions (${state.recordings.size})", style = MaterialTheme.typography.titleMedium)
+@Composable
+private fun HistoryScreen(
+    recordings: List<RecordingEntity>,
+    isPlayingId: Long?,
+    onPlay: (RecordingEntity) -> Unit,
+    onDelete: (RecordingEntity) -> Unit
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        Text("Saved recordings: ${recordings.size}", style = MaterialTheme.typography.titleMedium)
         LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            items(state.recordings, key = { it.id }) { row ->
+            items(recordings, key = { it.id }) { row ->
                 RecordingCard(
                     row = row,
-                    isPlaying = state.isPlayingId == row.id,
+                    isPlaying = isPlayingId == row.id,
                     onPlay = { onPlay(row) },
                     onDelete = { onDelete(row) }
                 )

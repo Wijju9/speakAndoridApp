@@ -29,9 +29,14 @@ class SpeechRecorderManager(private val context: Context) {
     private var outputFile: File? = null
     private var startElapsedRealtime = 0L
 
+    private var finalTranscript = ""
+    private var partialTranscript = ""
+
     fun start() {
         if (_state.value.isRecording) return
         outputFile = File(context.filesDir, "rec_${System.currentTimeMillis()}.m4a")
+        finalTranscript = ""
+        partialTranscript = ""
 
         mediaRecorder = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
             MediaRecorder(context)
@@ -55,7 +60,7 @@ class SpeechRecorderManager(private val context: Context) {
         }
 
         startElapsedRealtime = SystemClock.elapsedRealtime()
-        _state.value = LiveState(isRecording = true)
+        _state.value = LiveState(isRecording = true, transcriptEnglish = "")
     }
 
     fun tick() {
@@ -66,7 +71,7 @@ class SpeechRecorderManager(private val context: Context) {
     }
 
     fun stop(): Pair<File?, String> {
-        val transcript = _state.value.transcriptEnglish
+        val transcript = combineText()
         runCatching { speechRecognizer?.stopListening() }
         runCatching { speechRecognizer?.destroy() }
         speechRecognizer = null
@@ -96,6 +101,11 @@ class SpeechRecorderManager(private val context: Context) {
         putExtra(RecognizerIntent.EXTRA_LANGUAGE, "en-US")
     }
 
+    private fun combineText(): String = listOf(finalTranscript, partialTranscript)
+        .filter { it.isNotBlank() }
+        .joinToString(" ")
+        .trim()
+
     private val recognitionListener = object : RecognitionListener {
         override fun onReadyForSpeech(params: android.os.Bundle?) = Unit
         override fun onBeginningOfSpeech() = Unit
@@ -114,10 +124,13 @@ class SpeechRecorderManager(private val context: Context) {
                 ?.firstOrNull()
                 ?.trim()
                 .orEmpty()
+
             if (text.isNotBlank()) {
-                val merged = (_state.value.transcriptEnglish + " " + text).trim()
-                _state.value = _state.value.copy(transcriptEnglish = merged)
+                finalTranscript = (finalTranscript + " " + text).trim()
+                partialTranscript = ""
+                _state.value = _state.value.copy(transcriptEnglish = finalTranscript)
             }
+
             if (_state.value.isRecording) {
                 runCatching { speechRecognizer?.startListening(recognizerIntent()) }
             }
@@ -128,9 +141,9 @@ class SpeechRecorderManager(private val context: Context) {
                 ?.firstOrNull()
                 ?.trim()
                 .orEmpty()
-            if (text.isNotBlank()) {
-                _state.value = _state.value.copy(transcriptEnglish = text)
-            }
+
+            partialTranscript = text
+            _state.value = _state.value.copy(transcriptEnglish = combineText())
         }
 
         override fun onEvent(eventType: Int, params: android.os.Bundle?) = Unit
