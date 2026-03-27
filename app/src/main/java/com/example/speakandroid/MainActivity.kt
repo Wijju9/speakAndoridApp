@@ -92,18 +92,19 @@ fun SpeakApp(
     ) {
         Text("Speak Android", style = MaterialTheme.typography.titleLarge)
 
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Button(onClick = { screen = AppScreen.RECORD }) { Text("Record Screen") }
-            Button(onClick = { screen = AppScreen.HISTORY }) { Text("Recordings List") }
-        }
-
         when (screen) {
-            AppScreen.RECORD -> RecordScreen(state = state, onStart = onStart, onStop = onStop)
+            AppScreen.RECORD -> RecordScreen(
+                state = state,
+                onStart = onStart,
+                onStop = onStop,
+                onOpenHistory = { screen = AppScreen.HISTORY }
+            )
             AppScreen.HISTORY -> HistoryScreen(
                 recordings = state.recordings,
                 isPlayingId = state.isPlayingId,
                 onPlay = onPlay,
-                onDelete = onDelete
+                onDelete = onDelete,
+                onBack = { screen = AppScreen.RECORD }
             )
         }
     }
@@ -113,7 +114,8 @@ fun SpeakApp(
 private fun RecordScreen(
     state: MainViewModel.UiState,
     onStart: () -> Unit,
-    onStop: () -> Unit
+    onStop: () -> Unit,
+    onOpenHistory: () -> Unit
 ) {
     val hours = state.elapsedMillis / 3_600_000
     val minutes = (state.elapsedMillis % 3_600_000) / 60_000
@@ -127,6 +129,7 @@ private fun RecordScreen(
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             Button(onClick = onStart, enabled = !state.isRecording) { Text("Start Recording") }
             Button(onClick = onStop, enabled = state.isRecording) { Text("Stop Recording") }
+            Button(onClick = onOpenHistory) { Text("Recordings List") }
         }
 
         Text("Live English transcription:")
@@ -144,9 +147,11 @@ private fun HistoryScreen(
     recordings: List<RecordingEntity>,
     isPlayingId: Long?,
     onPlay: (RecordingEntity) -> Unit,
-    onDelete: (RecordingEntity) -> Unit
+    onDelete: (RecordingEntity) -> Unit,
+    onBack: () -> Unit
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        Button(onClick = onBack) { Text("Back") }
         Text("Saved recordings: ${recordings.size}", style = MaterialTheme.typography.titleMedium)
         LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
             items(recordings, key = { it.id }) { row ->
@@ -175,8 +180,6 @@ private fun RecordingCard(
             )
             Text("Duration: ${row.durationMillis / 1000}s")
             Text("English: ${row.englishText}")
-            Text("Hindi: ${row.hindiText}")
-            Text("Gujarati: ${row.gujaratiText}")
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 Button(onClick = onPlay, enabled = !isPlaying) {
                     Text(if (isPlaying) "Playing..." else "Replay")

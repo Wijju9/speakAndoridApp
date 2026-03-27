@@ -23,8 +23,6 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     private val dao = AppDatabase.get(application).recordingDao()
     private val recorderManager = SpeechRecorderManager(application)
-    private val translatorRepository = TranslatorRepository()
-
     private val _uiState = MutableStateFlow(UiState())
     val uiState: StateFlow<UiState> = _uiState.asStateFlow()
 
@@ -66,27 +64,26 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     fun stopRecording() {
         viewModelScope.launch {
-            _uiState.update { it.copy(status = "Stopping and translating...") }
+            _uiState.update { it.copy(status = "Stopping and saving English text...") }
             val (file, english, durationMillis) = recorderManager.stop()
             if (file == null) {
                 _uiState.update { it.copy(status = "No recording file created.") }
                 return@launch
             }
 
-            val (hindi, gujarati) = translatorRepository.toHindiAndGujarati(english)
             dao.insert(
                 RecordingEntity(
                     filePath = file.absolutePath,
                     createdAt = System.currentTimeMillis(),
                     durationMillis = durationMillis,
                     englishText = english,
-                    hindiText = hindi,
-                    gujaratiText = gujarati
+                    hindiText = "",
+                    gujaratiText = ""
                 )
             )
             _uiState.update {
                 it.copy(
-                    status = "Saved locally. English + Hindi + Gujarati text ready."
+                    status = "Saved locally with English speech-to-text."
                 )
             }
         }
