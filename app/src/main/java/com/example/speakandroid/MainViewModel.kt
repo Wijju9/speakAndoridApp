@@ -39,7 +39,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     it.copy(
                         isRecording = live.isRecording,
                         elapsedMillis = live.elapsedMillis,
-                        liveEnglishText = live.transcriptEnglish
+                        liveEnglishText = live.transcriptEnglish,
+                        status = live.lastError ?: it.status
                     )
                 }
             }
@@ -54,7 +55,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun startRecording() {
-        recorderManager.start()
+        val startError = recorderManager.start()
+        if (startError != null) {
+            _uiState.update { it.copy(status = startError) }
+            return
+        }
         _uiState.update {
             it.copy(
                 status = "Recording started. Live English transcription running..."
@@ -83,7 +88,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             )
             _uiState.update {
                 it.copy(
-                    status = "Saved locally with English speech-to-text."
+                    status = if (english.isBlank()) {
+                        "Saved audio, but no English text was recognized. Please check mic/network and try again."
+                    } else {
+                        "Saved locally with English speech-to-text."
+                    }
                 )
             }
         }
