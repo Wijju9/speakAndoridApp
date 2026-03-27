@@ -46,7 +46,8 @@ class MainActivity : ComponentActivity() {
                     state = uiState,
                     onStart = viewModel::startRecording,
                     onStop = viewModel::stopRecording,
-                    onPlay = viewModel::playRecording
+                    onPlay = viewModel::playRecording,
+                    onDelete = viewModel::deleteRecording
                 )
             }
         }
@@ -73,7 +74,8 @@ fun RecordingScreen(
     state: MainViewModel.UiState,
     onStart: () -> Unit,
     onStop: () -> Unit,
-    onPlay: (RecordingEntity) -> Unit
+    onPlay: (RecordingEntity) -> Unit,
+    onDelete: (RecordingEntity) -> Unit
 ) {
     Column(
         modifier = Modifier
@@ -108,7 +110,8 @@ fun RecordingScreen(
                 RecordingCard(
                     row = row,
                     isPlaying = state.isPlayingId == row.id,
-                    onPlay = { onPlay(row) }
+                    onPlay = { onPlay(row) },
+                    onDelete = { onDelete(row) }
                 )
             }
         }
@@ -119,7 +122,8 @@ fun RecordingScreen(
 private fun RecordingCard(
     row: RecordingEntity,
     isPlaying: Boolean,
-    onPlay: () -> Unit
+    onPlay: () -> Unit,
+    onDelete: () -> Unit
 ) {
     Card(modifier = Modifier.fillMaxWidth()) {
         Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -130,8 +134,13 @@ private fun RecordingCard(
             Text("English: ${row.englishText}")
             Text("Hindi: ${row.hindiText}")
             Text("Gujarati: ${row.gujaratiText}")
-            Button(onClick = onPlay, enabled = !isPlaying) {
-                Text(if (isPlaying) "Playing..." else "Replay")
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Button(onClick = onPlay, enabled = !isPlaying) {
+                    Text(if (isPlaying) "Playing..." else "Replay")
+                }
+                Button(onClick = onDelete) {
+                    Text("Delete")
+                }
             }
         }
     }

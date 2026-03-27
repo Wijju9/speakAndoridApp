@@ -92,6 +92,17 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    fun deleteRecording(row: RecordingEntity) {
+        viewModelScope.launch {
+            dao.deleteById(row.id)
+            runCatching {
+                val f = java.io.File(row.filePath)
+                if (f.exists()) f.delete()
+            }
+            _uiState.update { it.copy(status = "Recording deleted.") }
+        }
+    }
+
     fun playRecording(row: RecordingEntity) {
         _uiState.update { it.copy(isPlayingId = row.id, status = "Playing audio...") }
         recorderManager.play(row.filePath) {
