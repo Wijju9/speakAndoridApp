@@ -9,14 +9,17 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -26,6 +29,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import java.text.SimpleDateFormat
@@ -128,22 +132,28 @@ private fun RecordScreen(
     val minutes = (state.elapsedMillis % 3_600_000) / 60_000
     val seconds = (state.elapsedMillis % 60_000) / 1000
 
-    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        Text("Status: ${state.status}")
-        Text("Timer: %02d:%02d:%02d".format(hours, minutes, seconds))
-        Text("Use this screen to start/stop and see full live speaking text.")
-
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Button(onClick = onStart, enabled = !state.isRecording) { Text("Start Recording") }
-            Button(onClick = onStop, enabled = state.isRecording) { Text("Stop Recording") }
+    Column(verticalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.fillMaxWidth()) {
+        Text("English", style = MaterialTheme.typography.titleMedium)
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            colors = CardDefaults.cardColors(containerColor = Color(0xFFF8F9FA))
+        ) {
+            Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text("Tap mic and speak", style = MaterialTheme.typography.bodyMedium, color = Color.Gray)
+                Text(
+                    text = if (state.liveEnglishText.isBlank()) "Speech text will appear here..." else state.liveEnglishText,
+                    style = MaterialTheme.typography.bodyLarge
+                )
+            }
         }
 
-        Text("Live English transcription:")
-        Card(modifier = Modifier.fillMaxWidth()) {
-            Text(
-                modifier = Modifier.padding(12.dp),
-                text = if (state.liveEnglishText.isBlank()) "Speak now..." else state.liveEnglishText
-            )
+        Spacer(modifier = Modifier.height(4.dp))
+        Text("Timer: %02d:%02d:%02d".format(hours, minutes, seconds))
+        Text("Status: ${state.status}", color = if (state.status.contains("error", true)) Color.Red else Color.Gray)
+
+        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            Button(onClick = onStart, enabled = !state.isRecording) { Text("🎤 Start") }
+            Button(onClick = onStop, enabled = state.isRecording) { Text("■ Stop") }
         }
     }
 }
