@@ -57,7 +57,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun startRecording() {
         val startError = recorderManager.start()
         if (startError != null) {
-            _uiState.update { it.copy(status = startError) }
+            _uiState.update { it.copy(status = "$startError Check log: files/stt_logs.txt") }
             return
         }
         _uiState.update {
@@ -85,9 +85,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             _uiState.update {
                 it.copy(
                     status = if (english.isBlank()) {
-                        "No English text was recognized. Please check mic/network and try again."
+                        "No English text recognized. Check log: files/stt_logs.txt"
                     } else {
-                        "Saved locally with English speech-to-text."
+                        "Text converted successfully."
                     }
                 )
             }

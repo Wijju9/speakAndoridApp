@@ -31,6 +31,7 @@ class SpeechRecorderManager(private val context: Context) {
     fun start(): String? {
         if (_state.value.isRecording) return null
         if (!SpeechRecognizer.isRecognitionAvailable(context)) {
+            AppLogger.error(context, "SpeechRecognizer unavailable on this device.")
             return "Speech recognition service is not available on this device."
         }
 
@@ -43,11 +44,13 @@ class SpeechRecorderManager(private val context: Context) {
                 setRecognitionListener(recognitionListener)
                 startListening(recognizerIntent())
             } ?: run {
+            AppLogger.error(context, "Failed to create/start SpeechRecognizer.")
             return "Unable to start speech recognizer."
         }
 
         startElapsedRealtime = SystemClock.elapsedRealtime()
         _state.value = LiveState(isRecording = true, transcriptEnglish = "", lastError = null)
+        AppLogger.info(context, "Speech recognition started successfully.")
         return null
     }
 
@@ -67,6 +70,11 @@ class SpeechRecorderManager(private val context: Context) {
 
         _state.value = LiveState()
         startElapsedRealtime = 0L
+        if (transcript.isBlank()) {
+            AppLogger.error(context, "Stopped recognition: no text captured. durationMs=$duration")
+        } else {
+            AppLogger.info(context, "Stopped recognition: text captured successfully. durationMs=$duration text=\"$transcript\"")
+        }
         return transcript to duration
     }
 
@@ -116,7 +124,9 @@ class SpeechRecorderManager(private val context: Context) {
         override fun onEndOfSpeech() = Unit
 
         override fun onError(error: Int) {
-            _state.value = _state.value.copy(lastError = errorText(error))
+            val errorMessage = errorText(error)
+            _state.value = _state.value.copy(lastError = errorMessage)
+            AppLogger.error(context, "SpeechRecognizer onError code=$error message=\"$errorMessage\"")
             if (_state.value.isRecording) {
                 runCatching { speechRecognizer?.startListening(recognizerIntent()) }
             }
@@ -132,6 +142,7 @@ class SpeechRecorderManager(private val context: Context) {
                 finalTranscript = (finalTranscript + " " + text).trim()
                 partialTranscript = ""
                 _state.value = _state.value.copy(transcriptEnglish = finalTranscript, lastError = null)
+                AppLogger.info(context, "SpeechRecognizer final result=\"$text\"")
             }
 
             if (_state.value.isRecording) {

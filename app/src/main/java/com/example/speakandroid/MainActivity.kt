@@ -150,6 +150,7 @@ private fun RecordScreen(
         Spacer(modifier = Modifier.height(4.dp))
         Text("Timer: %02d:%02d:%02d".format(hours, minutes, seconds))
         Text("Status: ${state.status}", color = if (state.status.contains("error", true)) Color.Red else Color.Gray)
+        Text("Debug log file: files/stt_logs.txt", style = MaterialTheme.typography.bodySmall, color = Color.Gray)
 
         Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             Button(onClick = onStart, enabled = !state.isRecording) { Text("🎤 Start") }
