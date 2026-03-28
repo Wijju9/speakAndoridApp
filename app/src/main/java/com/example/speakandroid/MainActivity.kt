@@ -28,6 +28,7 @@ import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.Text
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -127,7 +128,7 @@ fun SpeakApp(
         when (screen) {
             AppScreen.RECORD -> RecordScreen(
                 state = state,
-                onStart = onStart,
+                onAutoStart = onStart,
                 onStop = onStop,
                 onClear = onClear
             )
@@ -165,7 +166,7 @@ fun SpeakApp(
 @Composable
 private fun RecordScreen(
     state: MainViewModel.UiState,
-    onStart: () -> Unit,
+    onAutoStart: () -> Unit,
     onStop: () -> Unit,
     onClear: () -> Unit
 ) {
@@ -174,6 +175,12 @@ private fun RecordScreen(
     val hours = state.elapsedMillis / 3_600_000
     val minutes = (state.elapsedMillis % 3_600_000) / 60_000
     val seconds = (state.elapsedMillis % 60_000) / 1000
+
+    LaunchedEffect(state.isRecording, state.showPaywall) {
+        if (!state.isRecording && !state.showPaywall) {
+            onAutoStart()
+        }
+    }
 
     Column(
         verticalArrangement = Arrangement.spacedBy(12.dp),
@@ -192,7 +199,7 @@ private fun RecordScreen(
                     .verticalScroll(rememberScrollState()),
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                Text("Tap mic and speak", style = MaterialTheme.typography.bodyMedium, color = Color.Gray)
+                Text("Auto listening… speak now", style = MaterialTheme.typography.bodyMedium, color = Color.Gray)
                 Text(
                     text = if (state.liveEnglishText.isBlank()) "Speech text will appear here..." else state.liveEnglishText,
                     style = MaterialTheme.typography.bodyLarge,
@@ -207,7 +214,6 @@ private fun RecordScreen(
         Text("Debug log file: files/stt_logs.txt", style = MaterialTheme.typography.bodySmall, color = Color.Gray)
 
         Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            Button(onClick = onStart, enabled = !state.isRecording) { Text("🎤 Start") }
             Button(onClick = onStop, enabled = state.isRecording) { Text("■ Stop") }
             Button(onClick = onClear) { Text("🧹 Clear") }
         }
