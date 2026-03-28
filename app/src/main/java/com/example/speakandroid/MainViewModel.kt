@@ -1,8 +1,10 @@
 package com.example.speakandroid
 
 import android.app.Application
+import android.content.pm.PackageManager
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import androidx.core.content.ContextCompat
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -18,13 +20,13 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         val liveEnglishText: String = "",
         val recordings: List<RecordingEntity> = emptyList(),
         val isPlayingId: Long? = null,
-        val status: String = "Ready"
+        val status: String = "Ready",
+        val showPaywall: Boolean = false,
+        val isPremium: Boolean = false
     )
 
     private val dao = AppDatabase.get(application).recordingDao()
     private val recorderManager = SpeechRecorderManager(application)
-    private val translatorRepository = TranslatorRepository()
-
     private val _uiState = MutableStateFlow(UiState())
     val uiState: StateFlow<UiState> = _uiState.asStateFlow()
 
@@ -41,7 +43,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     it.copy(
                         isRecording = live.isRecording,
                         elapsedMillis = live.elapsedMillis,
-                        liveEnglishText = live.transcriptEnglish
+                        liveEnglishText = live.transcriptEnglish,
+                        status = live.lastError ?: it.status
                     )
                 }
             }
@@ -51,12 +54,37 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             while (true) {
                 delay(1000)
                 recorderManager.tick()
+                val current = _uiState.value
+                if (
+                    current.isRecording &&
+                    !current.isPremium &&
+                    current.elapsedMillis >= FREE_LIMIT_MILLIS
+                ) {
+                    stopRecording(limitReached = true)
+                }
             }
         }
     }
 
     fun startRecording() {
-        recorderManager.start()
+        if (!_uiState.value.isPremium && _uiState.value.showPaywall) {
+            _uiState.update { it.copy(status = "Free limit reached. Upgrade to continue.") }
+            return
+        }
+        val hasMicPermission = ContextCompat.checkSelfPermission(
+            getApplication(),
+            android.Manifest.permission.RECORD_AUDIO
+        ) == PackageManager.PERMISSION_GRANTED
+        if (!hasMicPermission) {
+            _uiState.update { it.copy(status = "Microphone permission is required. Please allow RECORD_AUDIO.") }
+            return
+        }
+
+        val startError = recorderManager.start()
+        if (startError != null) {
+            _uiState.update { it.copy(status = "$startError Check log: files/stt_logs.txt") }
+            return
+        }
         _uiState.update {
             it.copy(
                 status = "Recording started. Live English transcription running..."
@@ -64,31 +92,60 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    fun stopRecording() {
+    fun stopRecording(limitReached: Boolean = false) {
         viewModelScope.launch {
-            _uiState.update { it.copy(status = "Stopping and translating...") }
-            val (file, english, durationMillis) = recorderManager.stop()
-            if (file == null) {
-                _uiState.update { it.copy(status = "No recording file created.") }
-                return@launch
-            }
+            _uiState.update { it.copy(status = "Stopping and saving English text...") }
+            val (english, durationMillis) = recorderManager.stop()
 
-            val (hindi, gujarati) = translatorRepository.toHindiAndGujarati(english)
             dao.insert(
                 RecordingEntity(
-                    filePath = file.absolutePath,
+                    filePath = "",
                     createdAt = System.currentTimeMillis(),
                     durationMillis = durationMillis,
                     englishText = english,
-                    hindiText = hindi,
-                    gujaratiText = gujarati
+                    hindiText = "",
+                    gujaratiText = ""
                 )
             )
             _uiState.update {
                 it.copy(
-                    status = "Saved locally. English + Hindi + Gujarati text ready."
+                    status = if (english.isBlank()) {
+                        "No English text recognized. Check log: files/stt_logs.txt"
+                    } else {
+                        "Text converted successfully."
+                    },
+                    showPaywall = limitReached || it.showPaywall
                 )
             }
+        }
+    }
+
+    fun clearText() {
+        recorderManager.clearTranscript()
+        _uiState.update { it.copy(status = "Text cleared.") }
+    }
+
+    fun closePaywall() {
+        _uiState.update { it.copy(showPaywall = false) }
+    }
+
+    fun upgradeMonthly() {
+        _uiState.update {
+            it.copy(
+                isPremium = true,
+                showPaywall = false,
+                status = "Premium unlocked: ₹99/month plan selected."
+            )
+        }
+    }
+
+    fun upgradeLifetime() {
+        _uiState.update {
+            it.copy(
+                isPremium = true,
+                showPaywall = false,
+                status = "Premium unlocked: ₹299 lifetime plan selected."
+            )
         }
     }
 
@@ -104,9 +161,17 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun playRecording(row: RecordingEntity) {
+        if (row.filePath.isBlank()) {
+            _uiState.update { it.copy(status = "This entry has text only. Audio replay is not available.") }
+            return
+        }
         _uiState.update { it.copy(isPlayingId = row.id, status = "Playing audio...") }
         recorderManager.play(row.filePath) {
             _uiState.update { it.copy(isPlayingId = null, status = "Playback complete.") }
         }
+    }
+
+    companion object {
+        private const val FREE_LIMIT_MILLIS = 60_000L
     }
 }

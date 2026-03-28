@@ -3,64 +3,55 @@ package com.example.speakandroid
 import android.content.Context
 import android.content.Intent
 import android.media.MediaPlayer
-import android.media.MediaRecorder
-import android.os.Build
 import android.os.SystemClock
 import android.speech.RecognitionListener
 import android.speech.RecognizerIntent
 import android.speech.SpeechRecognizer
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
-import java.io.File
 
 class SpeechRecorderManager(private val context: Context) {
 
     data class LiveState(
         val isRecording: Boolean = false,
         val elapsedMillis: Long = 0,
-        val transcriptEnglish: String = ""
+        val transcriptEnglish: String = "",
+        val lastError: String? = null
     )
 
     private val _state = MutableStateFlow(LiveState())
     val state: StateFlow<LiveState> = _state
 
-    private var mediaRecorder: MediaRecorder? = null
     private var speechRecognizer: SpeechRecognizer? = null
-    private var outputFile: File? = null
     private var startElapsedRealtime = 0L
 
     private var finalTranscript = ""
     private var partialTranscript = ""
 
-    fun start() {
-        if (_state.value.isRecording) return
-        outputFile = File(context.filesDir, "rec_${System.currentTimeMillis()}.m4a")
+    fun start(): String? {
+        if (_state.value.isRecording) return null
+        if (!SpeechRecognizer.isRecognitionAvailable(context)) {
+            AppLogger.error(context, "SpeechRecognizer unavailable on this device.")
+            return "Speech recognition service is not available on this device."
+        }
+
         finalTranscript = ""
         partialTranscript = ""
 
-        mediaRecorder = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            MediaRecorder(context)
-        } else {
-            @Suppress("DEPRECATION")
-            MediaRecorder()
-        }.apply {
-            setAudioSource(MediaRecorder.AudioSource.MIC)
-            setOutputFormat(MediaRecorder.OutputFormat.MPEG_4)
-            setAudioEncoder(MediaRecorder.AudioEncoder.AAC)
-            setAudioSamplingRate(16000)
-            setAudioEncodingBitRate(96000)
-            setOutputFile(outputFile!!.absolutePath)
-            prepare()
-            start()
-        }
-
-        speechRecognizer = SpeechRecognizer.createSpeechRecognizer(context).apply {
-            setRecognitionListener(recognitionListener)
-            startListening(recognizerIntent())
+        speechRecognizer = runCatching { SpeechRecognizer.createSpeechRecognizer(context) }
+            .getOrNull()
+            ?.apply {
+                setRecognitionListener(recognitionListener)
+                startListening(recognizerIntent())
+            } ?: run {
+            AppLogger.error(context, "Failed to create/start SpeechRecognizer.")
+            return "Unable to start speech recognizer."
         }
 
         startElapsedRealtime = SystemClock.elapsedRealtime()
-        _state.value = LiveState(isRecording = true, transcriptEnglish = "")
+        _state.value = LiveState(isRecording = true, transcriptEnglish = "", lastError = null)
+        AppLogger.info(context, "Speech recognition started successfully.")
+        return null
     }
 
     fun tick() {
@@ -70,20 +61,28 @@ class SpeechRecorderManager(private val context: Context) {
         )
     }
 
-    fun stop(): Triple<File?, String, Long> {
+    fun stop(): Pair<String, Long> {
         val transcript = combineText()
         val duration = if (startElapsedRealtime == 0L) 0L else SystemClock.elapsedRealtime() - startElapsedRealtime
         runCatching { speechRecognizer?.stopListening() }
         runCatching { speechRecognizer?.destroy() }
         speechRecognizer = null
 
-        runCatching { mediaRecorder?.stop() }
-        runCatching { mediaRecorder?.release() }
-        mediaRecorder = null
-
         _state.value = LiveState()
         startElapsedRealtime = 0L
-        return Triple(outputFile, transcript, duration)
+        if (transcript.isBlank()) {
+            AppLogger.error(context, "Stopped recognition: no text captured. durationMs=$duration")
+        } else {
+            AppLogger.info(context, "Stopped recognition: text captured successfully. durationMs=$duration text=\"$transcript\"")
+        }
+        return transcript to duration
+    }
+
+    fun clearTranscript() {
+        finalTranscript = ""
+        partialTranscript = ""
+        _state.value = _state.value.copy(transcriptEnglish = "", lastError = null)
+        AppLogger.info(context, "Transcript cleared by user.")
     }
 
     fun play(filePath: String, onCompleted: () -> Unit) {
@@ -108,14 +107,34 @@ class SpeechRecorderManager(private val context: Context) {
         .joinToString(" ")
         .trim()
 
+    private fun errorText(error: Int): String = when (error) {
+        SpeechRecognizer.ERROR_AUDIO -> "Audio recording error."
+        SpeechRecognizer.ERROR_CLIENT -> "Speech recognizer client error."
+        SpeechRecognizer.ERROR_INSUFFICIENT_PERMISSIONS -> "Microphone permission missing."
+        SpeechRecognizer.ERROR_NETWORK -> "Network error during speech recognition."
+        SpeechRecognizer.ERROR_NETWORK_TIMEOUT -> "Speech recognition network timeout."
+        SpeechRecognizer.ERROR_NO_MATCH -> "No speech match found. Try speaking clearly."
+        SpeechRecognizer.ERROR_RECOGNIZER_BUSY -> "Speech recognizer is busy. Retrying..."
+        SpeechRecognizer.ERROR_SERVER -> "Speech recognizer server error."
+        SpeechRecognizer.ERROR_SPEECH_TIMEOUT -> "No speech detected. Try again."
+        else -> "Speech recognizer error: $error"
+    }
+
     private val recognitionListener = object : RecognitionListener {
         override fun onReadyForSpeech(params: android.os.Bundle?) = Unit
         override fun onBeginningOfSpeech() = Unit
         override fun onRmsChanged(rmsdB: Float) = Unit
         override fun onBufferReceived(buffer: ByteArray?) = Unit
-        override fun onEndOfSpeech() = Unit
+        override fun onEndOfSpeech() {
+            if (_state.value.isRecording) {
+                runCatching { speechRecognizer?.startListening(recognizerIntent()) }
+            }
+        }
 
         override fun onError(error: Int) {
+            val errorMessage = errorText(error)
+            _state.value = _state.value.copy(lastError = errorMessage)
+            AppLogger.error(context, "SpeechRecognizer onError code=$error message=\"$errorMessage\"")
             if (_state.value.isRecording) {
                 runCatching { speechRecognizer?.startListening(recognizerIntent()) }
             }
@@ -128,13 +147,10 @@ class SpeechRecorderManager(private val context: Context) {
                 .orEmpty()
 
             if (text.isNotBlank()) {
-                finalTranscript = (finalTranscript + " " + text).trim()
+                finalTranscript = text
                 partialTranscript = ""
-                _state.value = _state.value.copy(transcriptEnglish = finalTranscript)
-            }
-
-            if (_state.value.isRecording) {
-                runCatching { speechRecognizer?.startListening(recognizerIntent()) }
+                _state.value = _state.value.copy(transcriptEnglish = finalTranscript, lastError = null)
+                AppLogger.info(context, "SpeechRecognizer final result=\"$text\"")
             }
         }
 
@@ -145,7 +161,7 @@ class SpeechRecorderManager(private val context: Context) {
                 .orEmpty()
 
             partialTranscript = text
-            _state.value = _state.value.copy(transcriptEnglish = combineText())
+            _state.value = _state.value.copy(transcriptEnglish = combineText(), lastError = null)
         }
 
         override fun onEvent(eventType: Int, params: android.os.Bundle?) = Unit
