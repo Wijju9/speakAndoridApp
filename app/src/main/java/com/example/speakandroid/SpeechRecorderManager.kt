@@ -100,9 +100,6 @@ class SpeechRecorderManager(private val context: Context) {
         putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
         putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)
         putExtra(RecognizerIntent.EXTRA_LANGUAGE, "en-US")
-        putExtra(RecognizerIntent.EXTRA_LANGUAGE_PREFERENCE, "en-US")
-        putExtra(RecognizerIntent.EXTRA_CALLING_PACKAGE, context.packageName)
-        putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 1)
     }
 
     private fun combineText(): String = listOf(finalTranscript, partialTranscript)
@@ -128,7 +125,11 @@ class SpeechRecorderManager(private val context: Context) {
         override fun onBeginningOfSpeech() = Unit
         override fun onRmsChanged(rmsdB: Float) = Unit
         override fun onBufferReceived(buffer: ByteArray?) = Unit
-        override fun onEndOfSpeech() = Unit
+        override fun onEndOfSpeech() {
+            if (_state.value.isRecording) {
+                runCatching { speechRecognizer?.startListening(recognizerIntent()) }
+            }
+        }
 
         override fun onError(error: Int) {
             val errorMessage = errorText(error)
@@ -146,14 +147,10 @@ class SpeechRecorderManager(private val context: Context) {
                 .orEmpty()
 
             if (text.isNotBlank()) {
-                finalTranscript = (finalTranscript + " " + text).trim()
+                finalTranscript = text
                 partialTranscript = ""
                 _state.value = _state.value.copy(transcriptEnglish = finalTranscript, lastError = null)
                 AppLogger.info(context, "SpeechRecognizer final result=\"$text\"")
-            }
-
-            if (_state.value.isRecording) {
-                runCatching { speechRecognizer?.startListening(recognizerIntent()) }
             }
         }
 
