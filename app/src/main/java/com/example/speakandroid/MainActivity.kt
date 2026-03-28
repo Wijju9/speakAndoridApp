@@ -4,6 +4,7 @@ import android.Manifest
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Bundle
+import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
@@ -213,16 +214,30 @@ private fun RecordScreen(
         Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             Button(
                 onClick = {
-                    clipboardManager.setText(AnnotatedString(state.liveEnglishText))
+                    if (state.liveEnglishText.isBlank()) {
+                        Toast.makeText(context, "No text to copy.", Toast.LENGTH_SHORT).show()
+                    } else {
+                        clipboardManager.setText(AnnotatedString(state.liveEnglishText))
+                        Toast.makeText(context, "Text copied successfully.", Toast.LENGTH_SHORT).show()
+                    }
                 }
             ) { Text("Copy") }
             Button(
                 onClick = {
+                    if (state.liveEnglishText.isBlank()) {
+                        Toast.makeText(context, "No text to share.", Toast.LENGTH_SHORT).show()
+                        return@Button
+                    }
                     val shareIntent = Intent(Intent.ACTION_SEND).apply {
                         type = "text/plain"
                         putExtra(Intent.EXTRA_TEXT, state.liveEnglishText)
                     }
-                    context.startActivity(Intent.createChooser(shareIntent, "Share text"))
+                    runCatching {
+                        context.startActivity(Intent.createChooser(shareIntent, "Share text"))
+                        Toast.makeText(context, "Share opened successfully.", Toast.LENGTH_SHORT).show()
+                    }.onFailure {
+                        Toast.makeText(context, "Unable to share right now.", Toast.LENGTH_SHORT).show()
+                    }
                 }
             ) { Text("Share") }
         }
